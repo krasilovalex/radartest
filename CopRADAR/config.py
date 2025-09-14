@@ -1,0 +1,3 @@
+BOT_TOKEN = ""
+CHANNEL_ID = 9
+CHAT_ID = 9
