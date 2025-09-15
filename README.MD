@@ -1,4 +1,4 @@
-
+![Image](https://github.com/user-attachments/assets/a12e82a7-6c0e-41bd-849e-091b7bdaa702)
 # 🇮🇳🚔 Goa Traffic & Help Bot  
 
 Телеграм-бот для пользователей **в Гоа (Индия)**.  
