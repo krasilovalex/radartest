@@ -48,17 +48,17 @@
 
 ```bash
 sudo apt update && sudo apt install -y python3 python3-pip
-2️⃣ Загрузка бота
+### 2️⃣ Загрузка бота
 Скопируйте файлы проекта на сервер (SCP/SFTP) или через git:
 git clone <репозиторий_бота> goa_bot
 cd goa_bot
-3️⃣ Установка зависимостей
+### 3️⃣ Установка зависимостей
 pip3 install -r requirements.txt
-4️⃣ Настройка конфигурации
+### 4️⃣ Настройка конфигурации
 Создайте .env (или config.py) с вашими данными:
 BOT_TOKEN=ваш_токен_бота
 CHAT_ID=-1002940800193  # ID чата взаимопомощи
-5️⃣ Запуск
+### 5️⃣ Запуск
 python3 bot.py
 Или через systemd:
 Создайте файл /etc/systemd/system/goa-bot.service:
