@@ -48,6 +48,7 @@
 
 ```bash
 sudo apt update && sudo apt install -y python3 python3-pip
+```
 ### 2️⃣ Загрузка бота
 Скопируйте файлы проекта на сервер (SCP/SFTP) или через git:
 git clone <репозиторий_бота> goa_bot
