@@ -53,8 +53,8 @@ sudo apt update && sudo apt install -y python3 python3-pip
 ### 2️⃣ Загрузка бота
 **Скопируйте файлы проекта на сервер (SCP/SFTP) или через git:**
 ```bash
-git clone <репозиторий_бота> goa_bot
-cd goa_bot
+git clone <репозиторий_бота> radartest
+cd radartest
 ```
 ### 3️⃣ Установка зависимостей
 ```bash
@@ -80,8 +80,8 @@ After=network.target
 
 [Service]
 User=root
-WorkingDirectory=/root/goa_bot
-ExecStart=/usr/bin/python3 /root/goa_bot/bot.py
+WorkingDirectory=/root/radartest
+ExecStart=/usr/bin/python3 /root/radartest/copRADAR/bot.py
 Restart=always
 
 [Install]
