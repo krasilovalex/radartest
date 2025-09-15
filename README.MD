@@ -68,6 +68,8 @@ CHAT_ID=-1002940800193  # ID чата взаимопомощи
 ### 5️⃣ Запуск
 ```bash
 python3 bot.py
+```
+```bash
 Или через systemd:
 Создайте файл /etc/systemd/system/goa-bot.service:
 [Unit]
