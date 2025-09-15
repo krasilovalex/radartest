@@ -69,9 +69,10 @@ CHAT_ID=-1002940800193  # ID чата взаимопомощи
 ```bash
 python3 bot.py
 ```
-```bash
+
 Или через systemd:
 Создайте файл /etc/systemd/system/goa-bot.service:
+```bash
 [Unit]
 Description=GOA Telegram Bot
 After=network.target
