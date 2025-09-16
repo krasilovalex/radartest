@@ -1,7 +1,7 @@
 import asyncio
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile, InputFile, BufferedInputFile
-from config import BOT_TOKEN, CHANNEL_ID
+from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile, InputFile, BufferedInputFile, CallbackQuery
+from config import BOT_TOKEN, CHANNEL_ID, HELP_CHAT_LINK 
 from captcha import generate_captcha
 from aiogram.client.default import DefaultBotProperties
 from db import add_user, get_user, update_user
@@ -10,18 +10,21 @@ from aiogram.fsm.state import State, StatesGroup
 import os
 import io
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 CHID = CHANNEL_ID
+###CHAT_LINK = LINKCHAT
+tz = ZoneInfo("Asia/Kolkata")
 
 
 
-# 🏅 Ранги (RU / EN / HI)
+# 🏅 Ранги (RU / EN / )
 RANKS = [
-    {"min_points": 0,   "ru": "👶 Новичок", "en": "👶 Beginner", "hi": "👶 नया"},
-    {"min_points": 100, "ru": "🕵️ Скаут",  "en": "🕵️ Scout",    "hi": "🕵️ टोही"},
-    {"min_points": 300, "ru": "👁️ Наблюдающий", "en": "👁️ Observer", "hi": "👁️ पर्यवेक्षक"},
-    {"min_points": 500, "ru": "🧐 Смотрящий", "en": "🧐 Watcher",  "hi": "🧐 चौकसी"},
-    {"min_points": 800, "ru": "🦅 Глаз Системы", "en": "🦅 Eye of the System", "hi": "🦅 प्रणाली की आंख"}
+    {"min_points": 0,   "ru": "👶 Новичок", "en": "👶 Beginner"},
+    {"min_points": 100, "ru": "🕵️ Скаут",  "en": "🕵️ Scout"},
+    {"min_points": 300, "ru": "👁️ Наблюдающий", "en": "👁️ Observer"},
+    {"min_points": 500, "ru": "🧐 Смотрящий", "en": "🧐 Watcher"},
+    {"min_points": 800, "ru": "🦅 Глаз Системы", "en": "🦅 Eye of the System"}
 ]
 
 def get_rank(points: float) -> dict:
@@ -56,50 +59,47 @@ captcha_codes = {}
 langs = {
     "ru": "🇷🇺 Русский",
     "en": "🇬🇧 English",
-    "hi": "🇮🇳 हिंदी"
 }
 
 def main_menu(lang: str = "ru"):
     if lang == "ru":
         buttons = [
-            ["📍 Мост/Круг - Чисто"],
-            ["🚔 Мост/Круг - Копы"],
-            ["🚨 Отметить копов"],
-            ["✅ Копов нет"],
-            ["🆘 Нужна помощь"]
+            ("📍 Мост/Круг - Чисто", "bridge_clear"),
+            ("🚔 Мост/Круг - Копы", "bridge_cops"),
+            ("🚨 Отметить копов", "report_cops"),
+            ("✅ Копов нет", "no_cops"),
+            ("🆘 Нужна помощь", HELP_CHAT_LINK)  # редирект
         ]
     elif lang == "en":
         buttons = [
-            ["📍 Bridge/Circle - Clear"],
-            ["🚔 Bridge/Circle - Cops"],
-            ["🚨 Report Cops"],
-            ["✅ No Cops"],
-            ["🆘 Need Help"]
-        ]
-    elif lang == "hi":
-        buttons = [
-            ["📍 पुल/वृत्त - साफ़"],
-            ["🚔 पुल/वृत्त - पुलिस"],
-            ["🚨 पुलिस रिपोर्ट करें"],
-            ["✅ पुलिस नहीं"],
-            ["🆘 मदद चाहिए"]
+            ("📍 Bridge/Circle - Clear", "bridge_clear"),
+            ("🚔 Bridge/Circle - Cops", "bridge_cops"),
+            ("🚨 Report Cops", "report_cops"),
+            ("✅ No Cops", "no_cops"),
+            ("🆘 Need Help", HELP_CHAT_LINK)  # редирект
         ]
     else:
         buttons = [
-            ["📍 Bridge/Circle - Clear"],
-            ["🚔 Bridge/Circle - Cops"],
-            ["🚨 Report Cops"],
-            ["✅ No Cops"],
-            ["🆘 Need Help"]
+            ("📍 Bridge/Circle - Clear", "bridge_clear"),
+            ("🚔 Bridge/Circle - Cops", "bridge_cops"),
+            ("🚨 Report Cops", "report_cops"),
+            ("✅ No Cops", "no_cops"),
+            ("🆘 Need Help", HELP_CHAT_LINK)
         ]
 
-    kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=b[0]) for b in [row]] for row in buttons],
-        resize_keyboard=True
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=text,
+                    url=callback if text.startswith("🆘") else None,
+                    callback_data=None if text.startswith("🆘") else callback
+                )
+            ]
+            for text, callback in buttons
+        ]
     )
     return kb
-
-
 
 @dp.message(F.text == "/start")
 async def start_cmd(message: Message):
@@ -107,88 +107,120 @@ async def start_cmd(message: Message):
     user = get_user(message.from_user.id)
 
     if user['lang'] is None or user['lang'] == "":
-        kb = ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text=langs["ru"])],
-                [KeyboardButton(text=langs["en"])],
-                [KeyboardButton(text=langs["hi"])]
-            ],
-            resize_keyboard=True
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=langs["ru"], callback_data="lang_ru")],
+                [InlineKeyboardButton(text=langs["en"], callback_data="lang_en")]
+            ]
         )
-        await message.answer("👋 Привет! Выбери язык / Choose language / भाषा चुनें:", reply_markup=kb)
-        return  # важно: прекращаем выполнение здесь
+        await message.answer("👋 Привет! Выбери язык / Choose language", reply_markup=kb)
+        return
 
     # Если язык уже выбран, идём сразу к капче
     if not user['verifed']:
-        await start_captcha(message, user)
+        await start_captcha(message.from_user.id)
     else:
         await send_welcome(message, user)
 
 
-# Обработка выбора языка
-@dp.message(F.text.in_([langs["ru"], langs['en'], langs['hi']]))
-async def set_lang(message: Message):
-    lang_code = [k for k, v in langs.items() if v == message.text][0]
-    update_user(message.from_user.id, lang=lang_code)
-    user = get_user(message.from_user.id)
 
-    # После выбора языка — запускаем капчу
-    await start_captcha(message, user)
+@dp.callback_query(F.data.startswith("lang_"))
+async def set_lang(callback: CallbackQuery):
+    lang_code = callback.data.split("_")[1]
+    update_user(callback.from_user.id, lang=lang_code)
+    await callback.answer("✅ Язык выбран")
+    await callback.message.delete()
 
-
-
-
-# Функция капчи
-# Запуск капчи
-async def start_captcha(message: Message, user):
-    if not user['verifed']:
-        code, img = generate_captcha()
-        captcha_codes[message.from_user.id] = code
-
-        temp_file = "captcha.png"
-        img.save(temp_file)
-
-        lang = user['lang']
-        if lang == "ru":
-            text = "🛡 Для входа реши капчу. Введи число с картинки:"
-        elif lang == "en":
-            text = "🛡 Solve the captcha to enter. Enter the number from the image:"
-        elif lang == "hi":
-            text = "🛡 प्रवेश के लिए कैप्चा हल करें। चित्र से संख्या दर्ज करें:"
-        else:
-            text = "🛡 Solve the captcha to enter."
-
-        await message.answer(text)
-        await bot.send_photo(chat_id=message.chat.id, photo=FSInputFile(temp_file))
-    else:
-        await send_welcome(message, user)
+    # Теперь капча стартует сразу
+    await start_captcha(callback.from_user.id)
 
 
+
+
+
+
+
+
+
+# -----------------------------
+# Функция запуска капчи
+# -----------------------------
+# -----------------------------
+# Функция запуска капчи
+# -----------------------------
+async def start_captcha(chat_id: int):
+    user = get_user(chat_id)
+
+    if user.get('verifed', False):
+        await send_welcome(chat_id)
+        return
+
+    code, img = generate_captcha()
+    captcha_codes[chat_id] = code
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    lang = user.get('lang', 'en')
+    text = {
+        "ru": "🛡 Для входа реши капчу. Введи число с картинки:",
+        "en": "🛡 Solve the captcha to enter. Enter the number from the image:"
+    }.get(lang, "🛡 Solve the captcha to enter.")
+
+    await bot.send_message(chat_id, text)
+    await bot.send_photo(chat_id, BufferedInputFile(buf.read(), filename="captcha.png"))
+
+
+
+# -----------------------------
 # Проверка капчи
-# Проверка капчи
+# -----------------------------
 @dp.message(F.text.regexp(r"^\d{4}$"))
 async def check_captcha(message: Message):
     user_id = message.from_user.id
     user = get_user(user_id)
 
-    if user_id in captcha_codes:
-        if message.text == captcha_codes[user_id]:
-            update_user(user_id, verifed=True)
-            del captcha_codes[user_id]
-            await send_welcome(message, user)
-        else:
-            # Сразу новая капча при ошибке
-            code, img = generate_captcha()
-            captcha_codes[user_id] = code
+    if not user:
+        await message.answer("⚠ Ошибка. Сначала отправь /start")
+        return
 
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            buf.seek(0)
+    # Если пользователь уже верифицирован → ничего не делаем
+    if user.get('verifed', False):
+        captcha_codes.pop(user_id, None)  # удаляем капчу на всякий случай
+        return
 
-            photo_file = BufferedInputFile(buf.read(), filename="captcha.png")
+    # Если капча отсутствует → создаём новую
+    if user_id not in captcha_codes:
+        await start_captcha(message)
+        return
 
-            await message.answer("❌ Неверно! Новая капча. Введи число с картинки:")
-            await bot.send_photo(chat_id=message.chat.id, photo=photo_file)
+    # Проверяем код
+    if message.text == captcha_codes[user_id]:
+        # Верно
+        update_user(user_id, verifed=True)
+        captcha_codes.pop(user_id, None)
+
+        # Загружаем свежие данные из БД
+        user = get_user(user_id)
+        await send_welcome(message, user)
+    else:
+        # Неверно → новая капча
+        code, img = generate_captcha()
+        captcha_codes[user_id] = code
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+
+        lang = user.get('lang', 'en')
+        text = {
+            "ru": "❌ Неверно! Новая капча. Введи число с картинки:",
+            "en": "❌ Wrong! New captcha. Enter the number from the image:"
+        }.get(lang, "❌ Wrong! New captcha. Enter the number from the image:")
+
+        await message.answer(text)
+        await message.answer_photo(photo=BufferedInputFile(buf.read(), filename="captcha.png"))
 
 # Приветствие на выбранном языке
 from aiogram.types import FSInputFile
@@ -223,18 +255,6 @@ async def send_welcome(message: Message, user):
             "The more you help — the higher your rating ⭐ and rank:\n"
             "👶 Beginner\n🕵️ Scout\n👁️ Observer\n🧐 Watcher\n🦅 Eye of the System"
         )
-    elif lang == "hi":
-        welcome_text = (
-            "👋 <b>CopRadar</b> में आपका स्वागत है!\n"
-            "🗺 आपका गुमनाम अवलोकन मानचित्र।\n\n"
-            "यहाँ आप कर सकते हैं:\n"
-            "📍 तुरंत पुलिस पोस्ट मार्क करें\n"
-            "📰 अन्य पर्यवेक्षकों से नवीनतम जानकारी प्राप्त करें\n"
-            "🆘 अन्य प्रतिभागियों से मदद माँगें\n\n"
-            "सभी गुमनाम 🕶️।\n\n"
-            "जितना अधिक आप मदद करेंगे — आपकी रेटिंग ⭐ और रैंक बढ़ेगी:\n"
-            "👶 शुरुआती\n🕵️ स्काउट\n👁️ पर्यवेक्षक\n🧐 देखने वाला\n🦅 सिस्टम की आँख"
-        )
 
     await message.answer_photo(
         photo=photo,
@@ -244,7 +264,7 @@ async def send_welcome(message: Message, user):
     )
 
 
-@dp.message(F.text.in_([langs["ru"], langs['en'], langs['hi']]))
+@dp.message(F.text.in_([langs["ru"], langs['en']]))
 async def set_lang(message: Message):
     lang_code = [k for k, v in langs.items() if v == message.text][0]
     update_user(message.from_user.id, lang=lang_code)
@@ -260,45 +280,41 @@ async def set_lang(message: Message):
 clear_buttons = {
     "📍 Мост/Круг - Чисто": "ru",
     "📍 Bridge/Circle - Clear": "en",
-    "📍 पुल/वृत्त - साफ़": "hi"
 }
 
 clear_texts = {
     "ru": "Копов нет, дорога свободна ✅",
     "en": "No cops, the road is clear ✅",
-    "hi": "पुलिस नहीं है, सड़क खाली है ✅"
 }
 
-@dp.message(F.text.in_(list(clear_buttons.keys())))
-async def bridge_clear(message: Message):
-    user_id = message.from_user.id
+@dp.callback_query(F.data == "bridge_clear")
+async def bridge_clear(callback: CallbackQuery):
+    user_id = callback.from_user.id
     user = get_user(user_id)
-    lang_pressed = clear_buttons[message.text]
+    lang_pressed = "ru" if user['lang'] == "ru" else "en"  # выбираем язык для ответа
 
+    # Начисляем очки и обновляем ранг
     new_rank, new_points = update_user_activity(user_id, added_points=10)
+    current_rank = f"{new_rank['ru']} / {new_rank['en']}  ({new_points:.0f} очков)"
 
-    # Формируем читабельную строку ранга
-    current_rank = f"{new_rank['ru']} / {new_rank['en']} / {new_rank['hi']} ({new_points:.0f} очков)"
-
-    timestamp = datetime.now().strftime("%H:%M:%S")
+    timestamp = datetime.now(tz).strftime("%H:%M:%S")
     lat, lon = 15.64090, 73.75887
 
     # Отправка гео в канал
     await bot.send_location(chat_id=CHID, latitude=lat, longitude=lon)
 
-    # Сообщение в канал на всех языках
+    # Сообщение в канал
     msg = (
         f"⏱ {timestamp}\n"
         f"<b>{current_rank}</b>\n"
         f"{clear_texts['ru']}\n"
         f"{clear_texts['en']}\n"
-        f"{clear_texts['hi']}\n"
         f"📍 Координаты: {lat}, {lon}"
     )
     await bot.send_message(chat_id=CHID, text=msg)
 
-    # Ответ пользователю на языке кнопки
-    await message.answer(
+    # Ответ пользователю
+    await callback.message.answer(
         f"✅ Отметка отправлена: {clear_texts[lang_pressed]}\n"
         f"🎖 Твой текущий ранг:\n{current_rank}",
         parse_mode="HTML"
@@ -309,32 +325,35 @@ async def bridge_clear(message: Message):
     new_rating = min(user['rating'] + 0.2, 5)
     update_user(user_id, rating=new_rating)
 
+    await callback.answer()  # закрываем "часики" в кнопке
+
+
+
 
 cops_buttons = {
     "🚔 Мост/Круг - Копы": "ru",
     "🚔 Bridge/Circle - Cops": "en",
-    "🚔 पुल/वृत्त - पुलिस": "hi"
 }
 
 cops_texts = {
     "ru": "Замечены копы 🚔",
     "en": "Cops spotted 🚔",
-    "hi": "पुलिस देखी गई 🚔"
 }
 
 
-@dp.message(F.text.in_(list(cops_buttons.keys())))
-async def bridge_cops(message: Message):
-    user_id = message.from_user.id
-    lang_pressed = cops_buttons[message.text]
+@dp.callback_query(F.data == "bridge_cops")
+async def bridge_cops(callback : CallbackQuery):
+    user_id = callback.from_user.id
+    user = get_user(user_id)
+    lang_pressed = 'ru' if user['lang'] == 'ru' else 'en'
 
     # Добавляем очки активности и получаем обновлённый ранг и очки
     new_rank, new_points = update_user_activity(user_id, added_points=10)
 
     # Формируем читабельную строку ранга
-    current_rank = f"{new_rank['ru']} / {new_rank['en']} / {new_rank['hi']} ({new_points:.0f} очков)"
+    current_rank = f"{new_rank['ru']} / {new_rank['en']} ({new_points:.0f} очков)"
 
-    timestamp = datetime.now().strftime("%H:%M:%S")
+    timestamp = datetime.now(tz).strftime("%H:%M:%S")
     lat, lon = 15.64090, 73.75887
 
     # Отправка гео в канал
@@ -346,13 +365,12 @@ async def bridge_cops(message: Message):
         f"<b>{current_rank}</b>\n"
         f"{cops_texts['ru']}\n"
         f"{cops_texts['en']}\n"
-        f"{cops_texts['hi']}\n"
         f"📍 Координаты: {lat}, {lon}"
     )
     await bot.send_message(chat_id=CHID, text=channel_msg, parse_mode="HTML")
 
     # Сообщение пользователю — отметка и ранг
-    await message.answer(
+    await callback.message.answer(
         f"✅ Отметка отправлена: {cops_texts[lang_pressed]}\n"
         f"🎖 Твой текущий ранг:\n{current_rank}",
         parse_mode="HTML"
@@ -368,31 +386,31 @@ async def bridge_cops(message: Message):
 report_buttons = {
     "🚨 Отметить копов": "ru",
     "🚨 Report Cops": "en",
-    "🚨 पुलिस रिपोर्ट करें": "hi"
 }
 
 report_texts = {
     "ru": "Замечены копы 🚔",
     "en": "Cops reported 🚔",
-    "hi": "पुलिस देखी गई 🚔"
 }
 
 class ReportCops(StatesGroup):
     waiting_for_location = State()
 
 
-@dp.message(F.text.in_(list(report_buttons.keys())))
-async def report_cops_request(message: Message, state: FSMContext):
-    lang_pressed = report_buttons[message.text]
+@dp.callback_query(F.data == "report_cops")
+async def report_cops_request(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    user = get_user(user_id     )
+    lang_pressed = 'ru' if user['lang'] == 'ru' else 'en'
     await state.set_state(ReportCops.waiting_for_location)  # ждем гео
     await state.update_data(lang_pressed=lang_pressed)  # сохраним язык
 
     if lang_pressed == "ru":
-        await message.answer("📍 Отправь гео-метку места, где находятся копы. \nЧто бы отправить гео-метку, нажмите на скрепку в левом нижнем углу и выберите 'Геопозиция' ")
+        await callback.message.answer("📍 Отправь гео-метку места, где находятся копы. \nЧто бы отправить гео-метку, нажмите на скрепку в левом нижнем углу и выберите 'Геопозиция' ")
     elif lang_pressed == "en":
-        await message.answer("📍📍 Send the location of where the cops are.\nTo send a location, tap the paperclip in the lower-left corner and select 'Location'.")
-    else:
-        await message.answer("📍 वह स्थान भेजें जहां पुलिस देखी गई है।\nलोकेशन भेजने के लिए, नीचे बाएँ कोने में क्लिप (📎) पर टैप करें और 'स्थान' चुनें।")
+        await callback.message.answer("📍📍 Send the location of where the cops are.\nTo send a location, tap the paperclip in the lower-left corner and select 'Location'.")
+
+    await callback.answer()
 
 @dp.message(ReportCops.waiting_for_location, F.location)
 async def report_cops_location(message: Message, state : FSMContext):
@@ -403,11 +421,11 @@ async def report_cops_location(message: Message, state : FSMContext):
     new_rank, new_points = update_user_activity(user_id, added_points=10)
 
     # Формируем читабельную строку ранга
-    current_rank = f"{new_rank['ru']} / {new_rank['en']} / {new_rank['hi']} ({new_points:.0f} очков)"
+    current_rank = f"{new_rank['ru']} / {new_rank['en']} ({new_points:.0f} очков)"
 
     user = get_user(message.from_user.id)
     lat, lon = message.location.latitude, message.location.longitude
-    timestamp = datetime.now().strftime("%H:%M:%S")
+    timestamp = datetime.now(tz).strftime("%H:%M:%S")
 
 
     await bot.send_location(chat_id=CHID, latitude=lat, longitude=lon)
@@ -416,7 +434,6 @@ async def report_cops_location(message: Message, state : FSMContext):
         f"<b>{current_rank}</b>\n"
         f"{report_texts['ru']}\n"
         f"{report_texts['en']}\n"
-        f"{report_texts['hi']}\n"
         f"📍 Координаты: {lat}, {lon}"
     )
     await bot.send_message(chat_id=CHID, text=msg)
@@ -437,13 +454,11 @@ async def report_cops_location(message: Message, state : FSMContext):
 nocops_buttons = {
     "✅ Копов нет": "ru",
     "✅ No Cops": "en",
-    "✅ पुलिस नहीं": "hi"
 }
 
 nocops_texts = {
     "ru": "Копов нет, дорога свободна ✅",
     "en": "No cops, the road is clear ✅",
-    "hi": "पुलिस नहीं है, सड़क खाली है ✅"
 }
 
 
@@ -453,18 +468,19 @@ class NoCops(StatesGroup):
 
 
 # Обработка кнопки
-@dp.message(F.text.in_(list(nocops_buttons.keys())))
-async def nocops_request(message: Message, state: FSMContext):
-    lang_pressed = nocops_buttons[message.text]
+@dp.callback_query(F.data == 'no_cops')
+async def nocops_request(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    user = get_user(user_id)
+    lang_pressed = 'ru' if user['lang'] == 'ru' else 'en'
     await state.set_state(NoCops.waiting_for_location)   # ждем гео
     await state.update_data(lang_pressed=lang_pressed)   # сохраняем язык
 
     prompts = {
         "ru": "📍 Отправь гео-метку места, где копов НЕТ. \nЧто бы отправить гео-метку, нажмите на скрепку в левом нижнем углу и выберите 'Геопозиция'",
         "en": "📍 Send the location where there are NO cops.\nTo send a location, tap the paperclip in the lower-left corner and select 'Location'.",
-        "hi": "📍 वह स्थान भेजें जहां कोई पुलिस नहीं है।\nलोकेशन भेजने के लिए, नीचे बाएँ कोने में क्लिप (📎) पर टैप करें और 'स्थान' चुनें।"
     }
-    await message.answer(prompts[lang_pressed])
+    await callback.message.answer(prompts[lang_pressed])
 
 
 # Обработка гео-метки
@@ -476,12 +492,12 @@ async def nocops_location(message: Message, state: FSMContext):
 
     user = get_user(message.from_user.id)
     lat, lon = message.location.latitude, message.location.longitude
-    timestamp = datetime.now().strftime("%H:%M:%S")
+    timestamp = datetime.now(tz).strftime("%H:%M:%S")
 
     new_rank, new_points = update_user_activity(user_id, added_points=10)
 
     # Формируем читабельную строку ранга
-    current_rank = f"{new_rank['ru']} / {new_rank['en']} / {new_rank['hi']} ({new_points:.0f} очков)"
+    current_rank = f"{new_rank['ru']} / {new_rank['en']} ({new_points:.0f} очков)"
 
     # Отправляем гео в канал
     await bot.send_location(chat_id=CHID, latitude=lat, longitude=lon)
@@ -492,7 +508,6 @@ async def nocops_location(message: Message, state: FSMContext):
         f"<b>{current_rank}</b>\n"
         f"{nocops_texts['ru']}\n"
         f"{nocops_texts['en']}\n"
-        f"{nocops_texts['hi']}\n"
         f"📍 Координаты: {lat}, {lon}"
     )
     await bot.send_message(chat_id=CHID, text=msg)
@@ -515,37 +530,37 @@ async def nocops_location(message: Message, state: FSMContext):
 help_buttons = {
     "🆘 Нужна помощь": "ru",
     "🆘 Need Help": "en",
-    "🆘 मदद चाहिए": "hi"
 }
 
 help_texts = {
     "ru": "Если нужна помощь — заходи в чат:",
     "en": "If you need help — join the chat:",
-    "hi": "अगर मदद चाहिए — चैट में शामिल हों:"
 }
 
 CHAT_ID = "none"
 
 
-@dp.message(F.text.in_(list(help_buttons.keys())))
-async def need_help(message: Message):
-    lang_pressed = help_buttons[message.text]
+@dp.callback_query(F.data == 'need_help')
+async def need_help(callback : CallbackQuery):
+    user_id = callback.from_user.id
+    user = get_user(user_id)
+    lang_pressed = 'ru' if user['lang'] == 'ru' else 'en'
 
     try:
         # Создаём временную ссылку (1 день)
         invite = await bot.create_chat_invite_link(
             chat_id=CHAT_ID,
             expire_date=int(datetime.now().timestamp()) + 86400,
-            name=f"invite_for_{message.from_user.id}"
+            name=f"invite_for_{callback.from_user.id}"
         )
 
-        await message.answer(
+        await callback.message.answer(
             f"{help_texts[lang_pressed]}\n👉 {invite.invite_link}"
         )
 
     except Exception as e:
         # если бот не админ или нет прав
-        await message.answer(
+        await callback.message.answer(
             f"{help_texts[lang_pressed]}\n⚠️ Ошибка: бот не может создать приглашение."
         )
         print(f"Error creating invite link: {e}")
