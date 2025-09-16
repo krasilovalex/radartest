@@ -1,6 +1,6 @@
 import asyncio
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile, InputFile
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile, InputFile, BufferedInputFile
 from config import BOT_TOKEN, CHANNEL_ID
 from captcha import generate_captcha
 from aiogram.client.default import DefaultBotProperties
@@ -139,8 +139,8 @@ async def set_lang(message: Message):
 
 
 # Функция капчи
+# Запуск капчи
 async def start_captcha(message: Message, user):
-    # Если пользователь ещё не верифицирован
     if not user['verifed']:
         code, img = generate_captcha()
         captcha_codes[message.from_user.id] = code
@@ -148,7 +148,6 @@ async def start_captcha(message: Message, user):
         temp_file = "captcha.png"
         img.save(temp_file)
 
-        # Подпись капчи на языке пользователя
         lang = user['lang']
         if lang == "ru":
             text = "🛡 Для входа реши капчу. Введи число с картинки:"
@@ -161,33 +160,35 @@ async def start_captcha(message: Message, user):
 
         await message.answer(text)
         await bot.send_photo(chat_id=message.chat.id, photo=FSInputFile(temp_file))
-
     else:
-        # Если уже верифицирован — приветствие
         await send_welcome(message, user)
 
+
+# Проверка капчи
 # Проверка капчи
 @dp.message(F.text.regexp(r"^\d{4}$"))
 async def check_captcha(message: Message):
     user_id = message.from_user.id
     user = get_user(user_id)
+
     if user_id in captcha_codes:
         if message.text == captcha_codes[user_id]:
             update_user(user_id, verifed=True)
             del captcha_codes[user_id]
             await send_welcome(message, user)
         else:
+            # Сразу новая капча при ошибке
             code, img = generate_captcha()
             captcha_codes[user_id] = code
 
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             buf.seek(0)
-            photo_file = FSInputFile(buf, filename="captcha.png")
 
-            await message.answer("❌ Неверно! Попробуй ещё раз. Введи число с картинки:")
+            photo_file = BufferedInputFile(buf.read(), filename="captcha.png")
+
+            await message.answer("❌ Неверно! Новая капча. Введи число с картинки:")
             await bot.send_photo(chat_id=message.chat.id, photo=photo_file)
-
 
 # Приветствие на выбранном языке
 from aiogram.types import FSInputFile
@@ -523,7 +524,7 @@ help_texts = {
     "hi": "अगर मदद चाहिए — चैट में शामिल हों:"
 }
 
-CHAT_ID = -1002940800193
+CHAT_ID = "none"
 
 
 @dp.message(F.text.in_(list(help_buttons.keys())))
