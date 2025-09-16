@@ -13,6 +13,37 @@ from datetime import datetime
 
 CHID = CHANNEL_ID
 
+
+
+# 🏅 Ранги (RU / EN / HI)
+RANKS = [
+    {"min_points": 0,   "ru": "👶 Новичок", "en": "👶 Beginner", "hi": "👶 नया"},
+    {"min_points": 100, "ru": "🕵️ Скаут",  "en": "🕵️ Scout",    "hi": "🕵️ टोही"},
+    {"min_points": 300, "ru": "👁️ Наблюдающий", "en": "👁️ Observer", "hi": "👁️ पर्यवेक्षक"},
+    {"min_points": 500, "ru": "🧐 Смотрящий", "en": "🧐 Watcher",  "hi": "🧐 चौकसी"},
+    {"min_points": 800, "ru": "🦅 Глаз Системы", "en": "🦅 Eye of the System", "hi": "🦅 प्रणाली की आंख"}
+]
+
+def get_rank(points: float) -> dict:
+    """
+    Возвращает ранг (словарь со всеми языками)
+    """
+    rank = RANKS[0]
+    for r in RANKS:
+        if points >= r['min_points']:
+            rank = r
+    return rank
+
+def update_user_activity(user_id, added_points: float):
+    user = get_user(user_id)
+    new_points = user.get('points', 0) + added_points
+    new_rank = get_rank(new_points)
+
+    update_user(user_id, points=new_points, rank=new_rank)  # теперь rank — словарь
+
+    return new_rank, new_points
+
+
 bot = Bot(
     token=BOT_TOKEN,
     default=DefaultBotProperties(parse_mode="HTML")
@@ -213,24 +244,6 @@ async def set_lang(message: Message):
 
 
 
-@dp.message(F.text == "🚔 Мост/Круг - Копы")
-async def bridge_clear(message:Message):
-    user_id = message.from_user.id
-    user = get_user(user_id)
-
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    text = "Осторожно дежурит патруль 🚨"
-    lat, lon = 15.64090, 73.75887
-    await bot.send_location(chat_id=CHID, latitude=lat, longitude=lon)
-    msg = f"⏱ {timestamp}\n<b>{user['rank']} [{user['rating']:.1f}]</b>\n{text}\n📍 Координаты: {lat}, {lon}"
-    await bot.send_message(chat_id=CHID, text=msg)
-    
-
-    await message.answer("✅ Отметка отправлена: Осторожно дежурит патруль!")
-
-    new_rating = min(user['rating'] + 0.1, 5)
-    update_user(user_id, rating = new_rating)
-
  
 # Тексты для кнопки "Чисто"
 clear_buttons = {
@@ -251,6 +264,11 @@ async def bridge_clear(message: Message):
     user = get_user(user_id)
     lang_pressed = clear_buttons[message.text]
 
+    new_rank, new_points = update_user_activity(user_id, added_points=10)
+
+    # Формируем читабельную строку ранга
+    current_rank = f"{new_rank['ru']} / {new_rank['en']} / {new_rank['hi']} ({new_points:.0f} очков)"
+
     timestamp = datetime.now().strftime("%H:%M:%S")
     lat, lon = 15.64090, 73.75887
 
@@ -260,7 +278,7 @@ async def bridge_clear(message: Message):
     # Сообщение в канал на всех языках
     msg = (
         f"⏱ {timestamp}\n"
-        f"<b>{user['rank']} [{user['rating']:.1f}]</b>\n"
+        f"<b>{current_rank}</b>\n"
         f"{clear_texts['ru']}\n"
         f"{clear_texts['en']}\n"
         f"{clear_texts['hi']}\n"
@@ -269,10 +287,15 @@ async def bridge_clear(message: Message):
     await bot.send_message(chat_id=CHID, text=msg)
 
     # Ответ пользователю на языке кнопки
-    await message.answer(f"✅ Отметка отправлена: {clear_texts[lang_pressed]}")
+    await message.answer(
+        f"✅ Отметка отправлена: {clear_texts[lang_pressed]}\n"
+        f"🎖 Твой текущий ранг:\n{current_rank}",
+        parse_mode="HTML"
+    )
 
     # Обновляем рейтинг
-    new_rating = min(user['rating'] + 0.1, 5)
+    user = get_user(user_id)
+    new_rating = min(user['rating'] + 0.2, 5)
     update_user(user_id, rating=new_rating)
 
 
@@ -292,8 +315,13 @@ cops_texts = {
 @dp.message(F.text.in_(list(cops_buttons.keys())))
 async def bridge_cops(message: Message):
     user_id = message.from_user.id
-    user = get_user(user_id)
     lang_pressed = cops_buttons[message.text]
+
+    # Добавляем очки активности и получаем обновлённый ранг и очки
+    new_rank, new_points = update_user_activity(user_id, added_points=10)
+
+    # Формируем читабельную строку ранга
+    current_rank = f"{new_rank['ru']} / {new_rank['en']} / {new_rank['hi']} ({new_points:.0f} очков)"
 
     timestamp = datetime.now().strftime("%H:%M:%S")
     lat, lon = 15.64090, 73.75887
@@ -301,23 +329,29 @@ async def bridge_cops(message: Message):
     # Отправка гео в канал
     await bot.send_location(chat_id=CHID, latitude=lat, longitude=lon)
 
-    # Сообщение в канал на всех языках
-    msg = (
+    # Сообщение в канал с уже форматированным ранговым текстом
+    channel_msg = (
         f"⏱ {timestamp}\n"
-        f"<b>{user['rank']} [{user['rating']:.1f}]</b>\n"
+        f"<b>{current_rank}</b>\n"
         f"{cops_texts['ru']}\n"
         f"{cops_texts['en']}\n"
         f"{cops_texts['hi']}\n"
         f"📍 Координаты: {lat}, {lon}"
     )
-    await bot.send_message(chat_id=CHID, text=msg)
+    await bot.send_message(chat_id=CHID, text=channel_msg, parse_mode="HTML")
 
-    # Ответ пользователю на его языке
-    await message.answer(f"✅ Отметка отправлена: {cops_texts[lang_pressed]}")
+    # Сообщение пользователю — отметка и ранг
+    await message.answer(
+        f"✅ Отметка отправлена: {cops_texts[lang_pressed]}\n"
+        f"🎖 Твой текущий ранг:\n{current_rank}",
+        parse_mode="HTML"
+    )
 
     # Обновляем рейтинг
+    user = get_user(user_id)
     new_rating = min(user['rating'] + 0.2, 5)
     update_user(user_id, rating=new_rating)
+
 
  # Тексты для кнопки "Отметить копов"
 report_buttons = {
@@ -343,16 +377,22 @@ async def report_cops_request(message: Message, state: FSMContext):
     await state.update_data(lang_pressed=lang_pressed)  # сохраним язык
 
     if lang_pressed == "ru":
-        await message.answer("📍 Отправь гео-метку места, где находятся копы.")
+        await message.answer("📍 Отправь гео-метку места, где находятся копы. \nЧто бы отправить гео-метку, нажмите на скрепку в левом нижнем углу и выберите 'Геопозиция' ")
     elif lang_pressed == "en":
-        await message.answer("📍 Send the location where the cops are spotted.")
+        await message.answer("📍📍 Send the location of where the cops are.\nTo send a location, tap the paperclip in the lower-left corner and select 'Location'.")
     else:
-        await message.answer("📍 वह स्थान भेजें जहां पुलिस देखी गई है।")
+        await message.answer("📍 वह स्थान भेजें जहां पुलिस देखी गई है।\nलोकेशन भेजने के लिए, नीचे बाएँ कोने में क्लिप (📎) पर टैप करें और 'स्थान' चुनें।")
 
 @dp.message(ReportCops.waiting_for_location, F.location)
 async def report_cops_location(message: Message, state : FSMContext):
     data = await state.get_data()
     lang_pressed = data['lang_pressed']
+    user_id = message.from_user.id
+
+    new_rank, new_points = update_user_activity(user_id, added_points=10)
+
+    # Формируем читабельную строку ранга
+    current_rank = f"{new_rank['ru']} / {new_rank['en']} / {new_rank['hi']} ({new_points:.0f} очков)"
 
     user = get_user(message.from_user.id)
     lat, lon = message.location.latitude, message.location.longitude
@@ -362,7 +402,7 @@ async def report_cops_location(message: Message, state : FSMContext):
     await bot.send_location(chat_id=CHID, latitude=lat, longitude=lon)
     msg = (
         f"⏱ {timestamp}\n"
-        f"<b>{user['rank']} [{user['rating']:.1f}]</b>\n"
+        f"<b>{current_rank}</b>\n"
         f"{report_texts['ru']}\n"
         f"{report_texts['en']}\n"
         f"{report_texts['hi']}\n"
@@ -370,10 +410,15 @@ async def report_cops_location(message: Message, state : FSMContext):
     )
     await bot.send_message(chat_id=CHID, text=msg)
 
-    await message.answer(f"✅ {report_texts[lang_pressed]} — координаты отправлены!")
+    await message.answer(
+        f"✅ {report_texts[lang_pressed]} — координаты отправлены!\n"
+        f"🎖 Твой текущий ранг:\n{current_rank}",
+        parse_mode="HTML"
+    )
 
+    user = get_user(user_id)
     new_rating = min(user['rating'] + 0.2, 5)
-    update_user(message.from_user.id, rating=new_rating)
+    update_user(user_id, rating=new_rating)
 
     await state.clear()
 
@@ -404,9 +449,9 @@ async def nocops_request(message: Message, state: FSMContext):
     await state.update_data(lang_pressed=lang_pressed)   # сохраняем язык
 
     prompts = {
-        "ru": "📍 Отправь гео-метку места, где копов НЕТ.",
-        "en": "📍 Send the location where there are NO cops.",
-        "hi": "📍 वह स्थान भेजें जहां कोई पुलिस नहीं है।"
+        "ru": "📍 Отправь гео-метку места, где копов НЕТ. \nЧто бы отправить гео-метку, нажмите на скрепку в левом нижнем углу и выберите 'Геопозиция'",
+        "en": "📍 Send the location where there are NO cops.\nTo send a location, tap the paperclip in the lower-left corner and select 'Location'.",
+        "hi": "📍 वह स्थान भेजें जहां कोई पुलिस नहीं है।\nलोकेशन भेजने के लिए, नीचे बाएँ कोने में क्लिप (📎) पर टैप करें और 'स्थान' चुनें।"
     }
     await message.answer(prompts[lang_pressed])
 
@@ -416,10 +461,16 @@ async def nocops_request(message: Message, state: FSMContext):
 async def nocops_location(message: Message, state: FSMContext):
     data = await state.get_data()
     lang_pressed = data["lang_pressed"]
+    user_id = message.from_user.id
 
     user = get_user(message.from_user.id)
     lat, lon = message.location.latitude, message.location.longitude
     timestamp = datetime.now().strftime("%H:%M:%S")
+
+    new_rank, new_points = update_user_activity(user_id, added_points=10)
+
+    # Формируем читабельную строку ранга
+    current_rank = f"{new_rank['ru']} / {new_rank['en']} / {new_rank['hi']} ({new_points:.0f} очков)"
 
     # Отправляем гео в канал
     await bot.send_location(chat_id=CHID, latitude=lat, longitude=lon)
@@ -427,7 +478,7 @@ async def nocops_location(message: Message, state: FSMContext):
     # Сообщение в канал на 3 языках
     msg = (
         f"⏱ {timestamp}\n"
-        f"<b>{user['rank']} [{user['rating']:.1f}]</b>\n"
+        f"<b>{current_rank}</b>\n"
         f"{nocops_texts['ru']}\n"
         f"{nocops_texts['en']}\n"
         f"{nocops_texts['hi']}\n"
@@ -436,11 +487,16 @@ async def nocops_location(message: Message, state: FSMContext):
     await bot.send_message(chat_id=CHID, text=msg)
 
     # Ответ пользователю на его языке
-    await message.answer(f"✅ {nocops_texts[lang_pressed]} — координаты отправлены!")
+    await message.answer(
+        f"✅ {nocops_texts[lang_pressed]} — координаты отправлены!\n"
+        f"🎖 Твой текущий ранг:\n{current_rank}",
+        parse_mode="HTML"
+    )
 
     # Обновляем рейтинг
-    new_rating = min(user["rating"] + 0.1, 5)
-    update_user(message.from_user.id, rating=new_rating)
+    user = get_user(user_id)
+    new_rating = min(user['rating'] + 0.2, 5)
+    update_user(user_id, rating=new_rating)
 
     await state.clear()
 
