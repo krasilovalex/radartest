@@ -1,3 +1,3 @@
 BOT_TOKEN = ""
-CHANNEL_ID = 9
-CHAT_ID = 9
+CHANNEL_ID = 0
+HELP_CHAT_LINK = "link"
