@@ -1,6 +1,6 @@
 import asyncio
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile, InputFile
 from config import BOT_TOKEN, CHANNEL_ID
 from captcha import generate_captcha
 from aiogram.client.default import DefaultBotProperties
@@ -190,8 +190,14 @@ async def check_captcha(message: Message):
 
 
 # Приветствие на выбранном языке
+from aiogram.types import FSInputFile
+
 async def send_welcome(message: Message, user):
     lang = user['lang']
+
+    # Локальный файл как FSInputFile
+    photo = FSInputFile("welcome.jpg")
+
     if lang == "ru":
         welcome_text = (
             "👋 Добро пожаловать в <b>CopRadar</b>!\n"
@@ -229,8 +235,12 @@ async def send_welcome(message: Message, user):
             "👶 शुरुआती\n🕵️ स्काउट\n👁️ पर्यवेक्षक\n🧐 देखने वाला\n🦅 सिस्टम की आँख"
         )
 
-    await message.answer(welcome_text, reply_markup=main_menu(user['lang']), parse_mode="HTML")
-
+    await message.answer_photo(
+        photo=photo,
+        caption=welcome_text,
+        reply_markup=main_menu(user['lang']),
+        parse_mode="HTML"
+    )
 
 
 @dp.message(F.text.in_([langs["ru"], langs['en'], langs['hi']]))
