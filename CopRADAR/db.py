@@ -9,7 +9,9 @@ def load_db():
             json.dump({}, f)
     with open(DB_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
-    
+
+
+
 
 
 def save_db(data):
@@ -22,7 +24,8 @@ def add_user(user_id: int):
     if str(user_id) not in data:
         data[str(user_id)] = {
             "rating": 4.5,
-            "rank" : "Новичок",
+            "rank" : {"min_points": 0, "ru": "👶 Новичок", "en": "👶 Beginner", "hi": "👶 नया"},  # словарь вместо строки
+            "points": 0,  # добавляем очки
             "lang" : "",
             "verifed" : False
         } 
