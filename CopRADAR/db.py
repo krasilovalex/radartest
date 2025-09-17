@@ -40,7 +40,11 @@ def update_user(user_id: int, **kwargs):
     data = load_db()
     if str(user_id) in data:
         for k, v in kwargs.items():
+            # не обновляем язык пустыми значениями
+            if k == 'lang' and (v is None or v == ""):
+                continue
             if v is not None:
                 data[str(user_id)][k] = v
         save_db(data)
+
     
