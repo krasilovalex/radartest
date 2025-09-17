@@ -223,12 +223,9 @@ async def check_captcha(message: Message):
         await message.answer_photo(photo=BufferedInputFile(buf.read(), filename="captcha.png"))
 
 # Приветствие на выбранном языке
-from aiogram.types import FSInputFile
 
 async def send_welcome(message: Message, user):
-    lang = user['lang']
-
-    # Локальный файл как FSInputFile
+    lang = user.get('lang', 'ru')  # если вдруг нет — берём 'ru'
     photo = FSInputFile("welcome.jpg")
 
     if lang == "ru":
@@ -255,11 +252,20 @@ async def send_welcome(message: Message, user):
             "The more you help — the higher your rating ⭐ and rank:\n"
             "👶 Beginner\n🕵️ Scout\n👁️ Observer\n🧐 Watcher\n🦅 Eye of the System"
         )
+    else:
+        # дефолт если язык неизвестен
+        welcome_text = (
+            "👋 Welcome to <b>CopRadar</b>!\n"
+            "🗺 Your anonymous observation map.\n\n"
+            "📍 Instantly mark police posts\n"
+            "📰 Get current info from other observers\n"
+            "🆘 Request help from other participants"
+        )
 
     await message.answer_photo(
         photo=photo,
         caption=welcome_text,
-        reply_markup=main_menu(user['lang']),
+        reply_markup=main_menu(lang),
         parse_mode="HTML"
     )
 
@@ -326,6 +332,8 @@ async def bridge_clear(callback: CallbackQuery):
     update_user(user_id, rating=new_rating)
 
     await callback.answer()  # закрываем "часики" в кнопке
+    user = get_user(callback.from_user.id)
+    await send_welcome(callback.message, user)
 
 
 
@@ -380,6 +388,8 @@ async def bridge_cops(callback : CallbackQuery):
     user = get_user(user_id)
     new_rating = min(user['rating'] + 0.2, 5)
     update_user(user_id, rating=new_rating)
+    user = get_user(callback.from_user.id)
+    await send_welcome(callback.message, user)
 
 
  # Тексты для кнопки "Отметить копов"
@@ -449,6 +459,8 @@ async def report_cops_location(message: Message, state : FSMContext):
     update_user(user_id, rating=new_rating)
 
     await state.clear()
+    user = get_user(message.from_user.id)
+    await send_welcome(message, user)
 
 
 nocops_buttons = {
@@ -525,6 +537,8 @@ async def nocops_location(message: Message, state: FSMContext):
     update_user(user_id, rating=new_rating)
 
     await state.clear()
+    user = get_user(message.from_user.id)
+    await send_welcome(message, user)
 
 
 help_buttons = {
