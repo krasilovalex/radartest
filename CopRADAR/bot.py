@@ -1,7 +1,7 @@
 import asyncio
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile, InputFile, BufferedInputFile, CallbackQuery
-from config import BOT_TOKEN, CHANNEL_ID, HELP_CHAT_LINK 
+from config import BOT_TOKEN, CHANNEL_ID, HELP_CHAT_LINK, BOT_USER, ADMINS_ID
 from captcha import generate_captcha
 from aiogram.client.default import DefaultBotProperties
 from db import add_user, get_user, update_user
@@ -12,9 +12,18 @@ import io
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+ADMIN_ID = ADMINS_ID
+BOT_USERNAME = BOT_USER
 CHID = CHANNEL_ID
 ###CHAT_LINK = LINKCHAT
 tz = ZoneInfo("Asia/Kolkata")
+
+
+class AdminPost(StatesGroup):
+    waiting_photo = State()
+    waiting_text = State()
+    waiting_button_text = State()
+    waiting_button_url = State()
 
 
 
@@ -100,6 +109,89 @@ def main_menu(lang: str = "ru"):
         ]
     )
     return kb
+
+
+@dp.message(F.text == "/admin")
+async def admin_start(message: Message, state: FSMContext):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ Нет доступа")
+        return
+
+    await message.answer("📸 Отправьте фото, если нужно, или '-' если без фото.")
+    await state.set_state(AdminPost.waiting_photo)
+
+
+@dp.message(AdminPost.waiting_photo)
+async def admin_get_photo(message: Message, state: FSMContext):
+    if message.photo:
+        photo_id = message.photo[-1].file_id
+        await state.update_data(photo=photo_id)
+    else:
+        if message.text.strip() == "-":
+            await state.update_data(photo=None)
+        else:
+            await message.answer("⚠️ Отправьте фото или '-'")
+            return
+
+    await message.answer("✍️ Теперь отправьте текст поста для канала.")
+    await state.set_state(AdminPost.waiting_text)
+
+
+@dp.message(AdminPost.waiting_text)
+async def admin_get_text(message: Message, state: FSMContext):
+    await state.update_data(post_text=message.html_text)
+    await message.answer("🔘 Введите текст кнопки (например 'Перейти к боту').")
+    await state.set_state(AdminPost.waiting_button_text)
+
+
+@dp.message(AdminPost.waiting_button_text)
+async def admin_get_button_text(message: Message, state: FSMContext):
+    await state.update_data(button_text=message.text)
+    await message.answer(f"🔗 Введите ссылку для кнопки (или отправьте '-' чтобы использовать https://t.me/{BOT_USERNAME})")
+    await state.set_state(AdminPost.waiting_button_url)
+
+
+@dp.message(AdminPost.waiting_button_url)
+async def admin_get_button_url(message: Message, state: FSMContext):
+    data = await state.get_data()
+    photo_id = data.get("photo")
+    post_text = data.get("post_text")
+    button_text = data.get("button_text")
+
+    if message.text.strip() == "-":
+        button_url = f"https://t.me/{BOT_USERNAME}"
+    else:
+        button_url = message.text.strip()
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=button_text, url=button_url)]
+        ]
+    )
+
+    # Отправляем
+    if photo_id:
+        msg = await bot.send_photo(
+            chat_id=CHID,
+            photo=photo_id,
+            caption=post_text,
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+    else:
+        msg = await bot.send_message(
+            chat_id=CHID,
+            text=post_text,
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+
+    # Закрепляем
+    await bot.pin_chat_message(chat_id=CHID, message_id=msg.message_id)
+
+    await message.answer("✅ Пост отправлен и закреплён!")
+    await state.clear()
+    
 
 @dp.message(F.text == "/start")
 async def start_cmd(message: Message):
@@ -222,16 +314,27 @@ async def check_captcha(message: Message):
         await message.answer(text)
         await message.answer_photo(photo=BufferedInputFile(buf.read(), filename="captcha.png"))
 
+
+
+async def get_channel_invite_link() -> str:
+    """
+    Создает (или обновляет) пригласительную ссылку для канала
+    """
+    invite_link = await bot.create_chat_invite_link(chat_id=CHID)
+    return invite_link.invite_link
 # Приветствие на выбранном языке
 
 async def send_welcome(message: Message, user):
     lang = user.get('lang', 'ru')  # если вдруг нет — берём 'ru'
     photo = FSInputFile("welcome.jpg")
 
+    channel_link = await get_channel_invite_link()
+
     if lang == "ru":
         welcome_text = (
             "👋 Добро пожаловать в <b>CopRadar</b>!\n"
             "🗺 Твоя анонимная карта наблюдения.\n\n"
+            f"📢 Присоединяйся к нашему <a href='{channel_link}'>каналу</a>\n\n"
             "Здесь ты можешь:\n"
             "📍 Мгновенно отмечать посты полиции\n"
             "📰 Получать актуальную информацию от других наблюдателей\n"
@@ -244,6 +347,7 @@ async def send_welcome(message: Message, user):
         welcome_text = (
             "👋 Welcome to <b>CopRadar</b>!\n"
             "🗺 Your anonymous observation map.\n\n"
+            f"📢 Join our <a href='{channel_link}'>channel</a>\n\n" 
             "Here you can:\n"
             "📍 Instantly mark police posts\n"
             "📰 Get current info from other observers\n"
@@ -317,7 +421,13 @@ async def bridge_clear(callback: CallbackQuery):
         f"{clear_texts['en']}\n"
         f"📍 Координаты: {lat}, {lon}"
     )
-    await bot.send_message(chat_id=CHID, text=msg)
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📍 Сообщить", url="https://t.me/{BOT_USERNAME}")]
+        ]
+    )
+    await bot.send_message(chat_id=CHID, text=msg, reply_markup=kb, parse_mode="HTML")
 
     # Ответ пользователю
     await callback.message.answer(
